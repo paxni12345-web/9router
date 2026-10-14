@@ -49,11 +49,18 @@ RUN mkdir -p /app/data && chown -R node:node /app && \
   ln -sf /app/data-home /root/.9router 2>/dev/null || true
 
 # Fix permissions at runtime (handles mounted volumes)
-RUN apk --no-cache upgrade && apk --no-cache add su-exec && \
+RUN apk --no-cache upgrade && apk --no-cache add su-exec curl && \
   printf '#!/bin/sh\nchown -R node:node /app/data /app/data-home 2>/dev/null\nexec su-exec node "$@"\n' > /entrypoint.sh && \
   chmod +x /entrypoint.sh
+
+# Optional SQLite replication (Litestream). Does nothing unless LITESTREAM_BUCKET + LITESTREAM_ENDPOINT are set.
+ARG LITESTREAM_VERSION=0.3.13
+RUN curl -fsSL "https://github.com/benbjohnson/litestream/releases/download/v${LITESTREAM_VERSION}/litestream-v${LITESTREAM_VERSION}-linux-amd64.tar.gz" | tar -xz -C /usr/local/bin litestream
+COPY litestream.yml /etc/litestream.yml
+COPY start-with-replication.sh /start-with-replication.sh
+RUN chmod +x /start-with-replication.sh
 
 EXPOSE 20128
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["node", "custom-server.js"]
+CMD ["/start-with-replication.sh"]
